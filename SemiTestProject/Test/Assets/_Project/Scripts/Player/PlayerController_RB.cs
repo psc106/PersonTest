@@ -13,7 +13,7 @@ public class PlayerController_RB: ValidatedMonoBehaviour
     [Header("References")]
     [SerializeField, Self] Rigidbody rb;
     [SerializeField, Self] Animator animator;
-    [SerializeField, Self] GroundChecker groundChecker;
+    [SerializeField, Self] TerrainChecker terrainChecker;
     [SerializeField, Anywhere] CinemachineFreeLook freeLookCam;
     [SerializeField, Anywhere] InputReader input;
 
@@ -32,9 +32,10 @@ public class PlayerController_RB: ValidatedMonoBehaviour
 
     Transform mainCam;
 
-    float currentSpeed;
-    float velocity;
+    Vector3 currentSpeed;
+    Vector3 velocity;
     float jumpVelocity;
+    bool umbState = false;
 
     Vector3 movement;
     StateMachine stateMachine;
@@ -43,7 +44,8 @@ public class PlayerController_RB: ValidatedMonoBehaviour
     CountDownTimer jumpTimer;
     CountDownTimer jumpCooldownTimer;
 
-    static readonly int Speed = Animator.StringToHash("Speed");
+    static readonly int Forward = Animator.StringToHash("Forward");
+    static readonly int Side = Animator.StringToHash("Side");
 
     private void Awake()
     {
@@ -65,10 +67,26 @@ public class PlayerController_RB: ValidatedMonoBehaviour
         stateMachine = new StateMachine();
 
         var locomotionState = new LocomotionState(this, animator);
-        var JumpState = new JumpState(this, animator);
+        var jumpState = new JumpState(this, animator);
+        var airState = new AirState(this, animator);
+        var interactState = new InteractState(this, animator);
+        var umbrellaState = new UmbrellaState(this, animator);
 
-        At(locomotionState, JumpState, new FuncPredicate(() => jumpTimer.IsRunning));
-        At(JumpState, locomotionState, new FuncPredicate(() => groundChecker.IsGrounded && !jumpTimer.IsRunning));
+        At(locomotionState, jumpState, new FuncPredicate(() => jumpTimer.IsRunning));
+        At(locomotionState, airState, new FuncPredicate(() => terrainChecker.IsAir));
+        //At(locomotionState, interactState, new FuncPredicate(() => ));
+
+        At(interactState, airState, new FuncPredicate(() => terrainChecker.IsAir));
+        //At(interactState, locomotionState, new FuncPredicate(() => ));
+
+        At(jumpState, locomotionState, new FuncPredicate(() => terrainChecker.IsGrounded && !jumpTimer.IsRunning));
+        At(jumpState, airState, new FuncPredicate(() => terrainChecker.IsAir && !jumpTimer.IsRunning));
+
+        At(airState, locomotionState, new FuncPredicate(() => terrainChecker.IsGrounded));
+        At(airState, umbrellaState, new FuncPredicate(() => umbState ));
+
+        At(umbrellaState, locomotionState, new FuncPredicate(() => terrainChecker.IsGrounded));
+        At(umbrellaState, airState, new FuncPredicate(() => !umbState ));
 
         stateMachine.SetState(locomotionState);
     }
@@ -88,13 +106,27 @@ public class PlayerController_RB: ValidatedMonoBehaviour
 
     void OnJump(bool performed)
     {
-        if(performed && !jumpTimer.IsRunning && !jumpCooldownTimer.IsRunning && groundChecker.IsGrounded)
+        if (!terrainChecker.IsAir && !umbState)
         {
-            jumpTimer.Start();
+            if(performed && !jumpTimer.IsRunning && !jumpCooldownTimer.IsRunning && terrainChecker.IsGrounded)
+            {
+                jumpTimer.Start();
+            }
+            else if(!performed && jumpTimer.IsRunning)
+            {
+                jumpTimer.Stop();
+            }
         }
-        else if(!performed && jumpTimer.IsRunning)
+        else if (!performed && terrainChecker.IsAir)
         {
-            jumpTimer.Stop();
+            if (umbState)
+            {
+                umbState = false;
+            }
+            else
+            {
+                umbState = true;
+            }
         }
     }
 
@@ -111,29 +143,76 @@ public class PlayerController_RB: ValidatedMonoBehaviour
     }
     private void FixedUpdate()
     {
+        Debug.Log(transform.position.y);
         stateMachine.FixedUpdate();
+    }
+
+    private void LateUpdate()
+    {
 
     }
 
     void UpdateAnimator()
     {
-        animator.SetFloat(Speed, currentSpeed);
+        animator.SetFloat(Forward, currentSpeed.z);
+        animator.SetFloat(Side, currentSpeed.x);
     }
 
-    public void HandleMovement()
+
+    public void InitPlayer()
+    {
+        umbState = false;
+        jumpTimer.Stop();
+    }
+
+    public void HandleJump()
     {
 
-        Vector3 adjustDirection = Quaternion.AngleAxis(mainCam.eulerAngles.y, Vector3.up) * movement;
-        if (adjustDirection.magnitude > 0f)
+        if (umbState)
         {
-            HandleRotation(adjustDirection);
-            HandleHorizontalMovement(adjustDirection);
-            SmoothSpeed(adjustDirection.magnitude);
+            if (terrainChecker.IsWindZone)
+            {
+                jumpVelocity += 2 * Time.fixedDeltaTime;
+                jumpVelocity = Mathf.Clamp(jumpVelocity, 0, 5);
+            }
+            else
+            {
+                jumpVelocity -= 2 * Time.fixedDeltaTime;
+                jumpVelocity = Mathf.Clamp(jumpVelocity, -2, 5);
+            }
         }
         else
         {
-            SmoothSpeed(0);
+            if (!jumpTimer.IsRunning && terrainChecker.IsGrounded)
+            {
+                jumpVelocity = 0;
+                return;
+            }
 
+            if (!jumpTimer.IsRunning)
+            {
+                jumpVelocity += Physics.gravity.y * gravityMultiplier * Time.fixedDeltaTime;
+            }
+
+            if (terrainChecker.IsCeiling && jumpVelocity > 0)
+            {
+                jumpVelocity = 0;
+            }
+        }
+
+        rb.velocity = new Vector3(rb.velocity.x, jumpVelocity, rb.velocity.z);
+    }
+    public void HandleMovement()
+    {
+        Vector3 adjustDirection = Quaternion.AngleAxis(mainCam.eulerAngles.y, Vector3.up) * movement;
+        if (adjustDirection.magnitude > 0f)
+        {
+            HandleHorizontalMovement(adjustDirection);
+            SmoothSpeed(adjustDirection);
+        }
+        else
+        {
+            SmoothSpeed(Vector3.zero);
             rb.velocity = new Vector3(0, rb.velocity.y, 0);
         }
     }
@@ -143,13 +222,12 @@ public class PlayerController_RB: ValidatedMonoBehaviour
         Vector3 velocity = adjustDirection * moveSpeed * Time.fixedDeltaTime;
         rb.velocity = new Vector3(velocity.x, rb.velocity.y, velocity.z);
     }
-
-    private void HandleRotation(Vector3 adjustDirection)
+/*  private void HandleRotation(Vector3 adjustDirection)
     {
         Quaternion targetRotation = Quaternion.LookRotation(adjustDirection);
         transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
         transform.LookAt(transform.position + adjustDirection);
-    }
+    }*/
 
     private void HandleTimers()
     {
@@ -158,38 +236,10 @@ public class PlayerController_RB: ValidatedMonoBehaviour
             timer.Tick(Time.deltaTime);
         }
     }
-    public void HandleJump()
+   
+
+    void SmoothSpeed(Vector3 value)
     {
-        if (!jumpTimer.IsRunning && groundChecker.IsGrounded)
-        {
-            jumpVelocity = 0;
-            return;
-        }
-
-        if (!jumpTimer.IsRunning)
-        {
-            jumpVelocity += Physics.gravity.y * gravityMultiplier * Time.fixedDeltaTime;
-           /* float launchPoint = 0.9f;
-            if(jumpTimer.Progress > launchPoint)
-            {
-                //v = sqrt(2gh) v 속도 g 그래비티 h 높이
-                jumpVelocity = Mathf.Sqrt(2 * jumpMaxHeight * Mathf.Abs(Physics.gravity.y));
-            }
-            else
-            {
-                jumpVelocity += (1 - jumpTimer.Progress) * jumpSpeed * Time.fixedDeltaTime;
-            }
-        }
-        else
-        {
-            jumpVelocity += Physics.gravity.y * gravityMultiplier * Time.fixedDeltaTime;*/
-        }
-
-        rb.velocity = new Vector3(rb.velocity.x, jumpVelocity, rb.velocity.z);
-    }
-
-    void SmoothSpeed(float value)
-    {
-        currentSpeed = Mathf.SmoothDamp(currentSpeed, value, ref velocity, smoothTime);
+        currentSpeed = Vector3.SmoothDamp(currentSpeed, value, ref velocity, smoothTime);
     }
 }

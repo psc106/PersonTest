@@ -8,6 +8,7 @@ public class CameraManager : ValidatedMonoBehaviour
 {
     [Header("Refrences")]
     [SerializeField, Anywhere] InputReader input;
+    [SerializeField, Anywhere] Transform player;
     [SerializeField, Anywhere] CinemachineFreeLook freeLookCam;
 
     [Header("Settings")]
@@ -33,20 +34,21 @@ public class CameraManager : ValidatedMonoBehaviour
 
     void OnLook(Vector2 cameraMovement, bool isDeviceMouse)
     {
+        //freeLookCam.m_XAxis.Value = 0;
         if (cameraMovementLock) return;
         if (isDeviceMouse && !isRMBPressed) return;
 
         float deviceMultiplier = isDeviceMouse ? Time.fixedDeltaTime : Time.deltaTime;
 
-        freeLookCam.m_XAxis.m_InputAxisValue = cameraMovement.x * SpeedMulitiplier * deviceMultiplier;
+        //freeLookCam.m_XAxis.m_InputAxisValue = cameraMovement.x * SpeedMulitiplier * deviceMultiplier;
         freeLookCam.m_YAxis.m_InputAxisValue = cameraMovement.y * SpeedMulitiplier * deviceMultiplier;
 
+        player.Rotate(Vector3.up, cameraMovement.x * SpeedMulitiplier * deviceMultiplier);
 
     }
 
     void OnEnableMouseControlCamera()
     {
-        Debug.Log("우클릭중");
         isRMBPressed = true;
 
         Cursor.lockState = CursorLockMode.Locked;
@@ -56,7 +58,6 @@ public class CameraManager : ValidatedMonoBehaviour
     }
     void OnDisableMouseControlCamera()
     {
-        Debug.Log("우클릭안함");
         isRMBPressed = false;
 
         Cursor.lockState = CursorLockMode.None;
@@ -71,8 +72,7 @@ public class CameraManager : ValidatedMonoBehaviour
         cameraMovementLock = true;
         yield return new WaitForEndOfFrame();
         cameraMovementLock = false;
-
-
     }
+
 
 }

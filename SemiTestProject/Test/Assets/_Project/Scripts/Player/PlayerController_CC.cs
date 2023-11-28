@@ -12,7 +12,7 @@ public class PlayerController_CC : ValidatedMonoBehaviour
     [Header("References")]
     [SerializeField, Self] CharacterController controller;
     [SerializeField, Self] Animator animator;
-    [SerializeField, Self] GroundChecker groundChecker;
+    [SerializeField, Self] TerrainChecker groundChecker;
     [SerializeField, Anywhere] CinemachineFreeLook freeLookCam;
     [SerializeField, Anywhere] InputReader input;
 

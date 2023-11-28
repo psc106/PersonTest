@@ -13,6 +13,7 @@ public class InputReader : ScriptableObject, PlayerInputActions.IPlayerActions
     public event UnityAction EnableMouseControlCamera = delegate { };
     public event UnityAction DisableMouseControlCamera = delegate { };
     public event UnityAction<bool> Jump = delegate { };
+    public event UnityAction<bool> Dash = delegate { };
 
     PlayerInputActions inputActions;
 
@@ -85,6 +86,14 @@ public class InputReader : ScriptableObject, PlayerInputActions.IPlayerActions
 
     public void OnRun(InputAction.CallbackContext context)
     {
-       //throw new System.NotImplementedException();
+        switch (context.phase)
+        {
+            case InputActionPhase.Started:
+                Dash.Invoke(true);
+                break;
+            case InputActionPhase.Canceled:
+                Dash.Invoke(false);
+                break;
+        }
     }
 }

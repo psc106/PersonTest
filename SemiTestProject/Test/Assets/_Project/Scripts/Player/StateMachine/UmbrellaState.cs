@@ -1,15 +1,15 @@
 ﻿using UnityEngine;
 
-public class JumpState : State 
+public class UmbrellaState : State
 {
-    public JumpState(PlayerController_RB player, Animator animator) : base(player, animator)
+    public UmbrellaState(PlayerController_RB player, Animator animator) : base(player, animator)
     {
 
     }
 
     public override void OnEnter()
     {
-        animator.CrossFade(JumpHash, crossFadeDuration);
+        animator.CrossFade(UmbrellaHash, crossFadeDuration);
     }
 
     public override void FixedUpdate()
@@ -17,4 +17,5 @@ public class JumpState : State
         player.HandleMovement();
         player.HandleJump();
     }
+
 }
